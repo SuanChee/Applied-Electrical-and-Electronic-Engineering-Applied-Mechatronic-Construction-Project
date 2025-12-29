@@ -1,0 +1,77 @@
+
+const int trigPin= A1;
+const int echoPin= A2;
+
+const int ENA= 11;
+const int IN1= 12;
+const int IN2= 13;
+
+const int ENB = 3;  
+const int IN3 = 2;  
+const int IN4 = 1;
+
+float distance;
+float duration;
+
+void moveforward(){
+  analogWrite(ENA, 150);
+  analogWrite(ENB, 150);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+}
+
+void turnright(){
+  analogWrite(ENA, 230);
+  analogWrite(ENB, 90);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
+
+void stoprobot(){
+  analogWrite(ENA, 0);
+  analogWrite(ENB, 0);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+}
+
+
+void setup() {
+  Serial.begin(9600);
+  
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  stoprobot();
+}
+
+void loop() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  duration= pulseIn(echoPin, HIGH);
+  distance= (duration*0.0343)/2;
+
+  if (distance> 25){
+    moveforward();
+  }
+  else{
+    turnright();
+  }
+
+}
