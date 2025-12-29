@@ -1,0 +1,258 @@
+#include <LiquidCrystal.h>
+#include <PinChangeInterrupt.h>
+
+//IR sensor pins
+const int LEFT_IR = A3;
+const int RIGHT_IR = A1;
+
+//motor pins
+const int ENA= 11;
+const int IN1= 12;
+const int IN2= 13;
+
+const int ENB = 3;  
+const int IN3 = 2;  
+const int IN4 = 1;
+
+//Encoder pins
+const int LEFT_ENCODER = A4;
+const int RIGHT_ENCODER = A2;
+
+//LCD pins
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
+//lcd time display
+unsigned long starttime = 0;
+unsigned long duration = 0;
+
+int lastturn = 0;
+
+const int blackthreshold = 6; 
+int blackcount = 0; 
+
+
+volatile long leftencodercount = 0;
+volatile long rightencodercount = 0;
+bool robotdone = false;
+
+//measure distance and stop
+const float targetdistance= 164.5;
+const int stopduration= 2000; //in ms
+
+//temporary stop
+bool ispaused= false;
+unsigned long stoptimer= 0;
+
+
+void moveforward(){
+  analogWrite(ENA, 230);
+  analogWrite(ENB, 230);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+}
+
+void turnright(){
+  analogWrite(ENA, 230);
+  analogWrite(ENB, 155);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+}
+
+void turnleft(){
+  analogWrite(ENA, 155);
+  analogWrite(ENB, 230);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+}
+
+void turnsharpright(){
+  analogWrite(ENA, 230);
+  analogWrite(ENB, 125);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
+
+void turnsharpleft(){
+  analogWrite(ENA, 125);
+  analogWrite(ENB, 230);
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+}
+
+void stoprobot(){
+  analogWrite(ENA, 0);
+  analogWrite(ENB, 0);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+}
+
+void displaytime(unsigned long starttime){
+  unsigned long currentmillis;
+
+  if(!robotdone){
+    currentmillis= millis()-starttime;
+  }
+  else{
+    currentmillis = duration;
+  }
+
+  int seconds = currentmillis/1000;
+  
+  lcd.setCursor(0,0);
+  lcd.print("Time:");
+  lcd.print(seconds);
+  lcd.print(" seconds");
+ }
+
+ float calculatedistance(){
+  const float pulseseachrev = 20.0;
+  const float wheelcircum = 20.12; //in cm
+  const float cmperpulse = wheelcircum/ pulseseachrev;
+
+  //noInterrupts();
+  long L = leftencodercount;
+  long R = rightencodercount;
+  //interrupts();
+
+  float avgticks = (L+R)/2.0;
+  float totaldistance = avgticks*cmperpulse;
+  
+  return totaldistance;  
+ }
+
+ void displaydistance(){
+  float cm = calculatedistance();
+
+  lcd.setCursor(0, 1);
+  lcd.print("Dist:");
+  lcd.print(cm, 2);
+  lcd.print(" cm");
+ }
+
+void readleftencoder(){
+  leftencodercount++;
+}
+
+void readrightencoder(){
+  rightencodercount++;
+}
+
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(LEFT_IR, INPUT);
+  pinMode(RIGHT_IR, INPUT);
+
+  pinMode(LEFT_ENCODER, INPUT_PULLUP);
+  pinMode(RIGHT_ENCODER, INPUT_PULLUP);
+
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  attachPCINT(digitalPinToPinChangeInterrupt(LEFT_ENCODER), readleftencoder, RISING);
+  attachPCINT(digitalPinToPinChangeInterrupt(RIGHT_ENCODER), readrightencoder, RISING);
+
+  lcd.begin(16, 2);
+  starttime = millis();
+}
+
+//HIGH MEANS OVER WHITE LINE
+
+
+void loop() 
+{
+    int leftvalue = digitalRead(LEFT_IR);
+    int rightvalue = digitalRead(RIGHT_IR);
+
+    //0 = forward, 1 = left, 2 = right
+
+    //display time and distance on lcd
+    displaytime(starttime);
+    displaydistance();
+    
+    if (!ispaused)
+    {
+      if (calculatedistance() >= targetdistance && stoptimer==0)
+      {
+        ispaused= true;
+        stoptimer= millis();
+        stoprobot();
+      }
+    }
+    else
+    {
+      if (millis()-stoptimer >= stopduration)
+      {
+        ispaused= false;
+        stoptimer= 1;
+      }
+      else
+      {
+        stoprobot();
+        return;
+      }
+    }
+    
+    
+   if (robotdone){
+    stoprobot();
+    return;
+    }
+    
+    if (leftvalue == LOW && rightvalue == LOW)
+    {
+        blackcount++; 
+        if (blackcount >= blackthreshold)
+        {
+            stoprobot();
+            robotdone = true; 
+            duration = millis()-starttime;
+        }
+        else
+        {
+            stoprobot(); 
+        }
+    }
+    else 
+    {
+        blackcount = 0;
+
+        if (leftvalue == HIGH && rightvalue == HIGH){
+            Serial.print(leftvalue);
+            Serial.println(rightvalue);
+            if (lastturn == 1){
+                turnsharpleft();
+            }
+            else if (lastturn == 2){
+                turnsharpright();
+            }
+            else{
+                moveforward();  
+            }
+        }
+        else if (leftvalue == LOW && rightvalue == HIGH){
+            turnleft();
+            lastturn = 1;
+        }
+        else if (leftvalue == HIGH && rightvalue == LOW){
+            turnright();
+            lastturn = 2;
+        }
+    }
+}
